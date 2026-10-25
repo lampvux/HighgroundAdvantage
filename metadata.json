@@ -1,0 +1,6 @@
+{
+  "name": "DropSpot - High Ground Vantage Navigator",
+  "description": "Spot any target on the ground from high buildings, balconies, or towers, pinpoint its exact coordinates, and get the shortest route with Google Maps.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
