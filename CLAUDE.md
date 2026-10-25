@@ -64,7 +64,8 @@ src/
 ## Gotchas
 
 - **Do not modify the HMR/watch settings in `vite.config.ts`.** AI Studio sets `DISABLE_HMR=true` to stop flicker during agent edits.
-- Sample images are referenced as string paths (`'/src/assets/images/...'`) in `App.tsx` and `ProductTourModal.tsx`. These work in `vite dev` but are **not bundled** by `vite build` — use `import img from './assets/images/x.jpg'` if production builds matter.
+- Reference images via ES imports (`import img from './assets/images/x.jpg'`), never string paths like `'/src/assets/...'` — those work in `vite dev` but are not bundled by `vite build`.
+- `esbuild` must stay within Vite 8's peer range (`^0.27 || ^0.28`) or `npm install` fails with ERESOLVE.
 - Google Maps directions URLs are built inline in `App.tsx` and `RouteAnalysisCard.tsx` instead of using `getGoogleMapsDirectionsUrl()` from `geoCalc.ts`. Prefer the helper when touching these.
 - Leaflet CSS is loaded from unpkg in `index.html`, not imported in JS. Leaflet markers use `L.divIcon` with inline HTML/SVG.
 - Geolocation and `DeviceOrientationEvent` require HTTPS (or localhost); iOS needs `DeviceOrientationEvent.requestPermission()` from a user gesture.

@@ -10,6 +10,9 @@ import {
   Check,
   Sparkles,
 } from 'lucide-react';
+import balconyViewImg from '../assets/images/balcony_view_crossing_1792833670416.jpg';
+import rooftopParkImg from '../assets/images/rooftop_park_fountain_1792833683045.jpg';
+import waterfrontDeckImg from '../assets/images/waterfront_promenade_deck_1792833696233.jpg';
 
 interface ProductTourModalProps {
   isOpen: boolean;
@@ -35,7 +38,7 @@ const TOUR_STEPS: TourStep[] = [
     title: 'Snap Your High-Ground View',
     subtitle: 'From a balcony, high-rise window, rooftop, or observation deck',
     description: 'Look down from your building and snap a photo of the streets or courtyard below.',
-    exampleImage: '/src/assets/images/balcony_view_crossing_1792833670416.jpg',
+    exampleImage: balconyViewImg,
     exampleCaption: '18th-floor balcony view looking down at street crosswalks and outdoor cafes.',
     icon: <Camera className="w-5 h-5 text-blue-600" />,
   },
@@ -44,7 +47,7 @@ const TOUR_STEPS: TourStep[] = [
     title: 'Tap Any Spot on the Ground',
     subtitle: 'Pinpoint any cafe table, crosswalk, fountain, or person',
     description: 'Click anywhere in the photo to lock on your destination with real-time aim reticle.',
-    exampleImage: '/src/assets/images/rooftop_park_fountain_1792833683045.jpg',
+    exampleImage: rooftopParkImg,
     exampleCaption: 'Tapping the central park fountain from a 12th-floor residential rooftop.',
     hasTargetOverlay: true,
     targetPos: { x: '50%', y: '50%', label: 'Central Fountain' },
@@ -55,7 +58,7 @@ const TOUR_STEPS: TourStep[] = [
     title: 'Visual Triangulation & GPS',
     subtitle: 'Translating image pixels into real latitude and longitude',
     description: 'Combines vantage GPS, floor level, and camera tilt to compute ground coordinates.',
-    exampleImage: '/src/assets/images/waterfront_promenade_deck_1792833696233.jpg',
+    exampleImage: waterfrontDeckImg,
     exampleCaption: 'Targeting a blue food truck on a riverside boardwalk (32m drop, 45m distance).',
     hasTargetOverlay: true,
     targetPos: { x: '43%', y: '45%', label: 'Riverside Food Truck' },
@@ -66,7 +69,7 @@ const TOUR_STEPS: TourStep[] = [
     title: 'Walk There via Google Maps',
     subtitle: 'Shortest route right from your building lobby to the spot',
     description: 'See the shortest walking path and open turn-by-turn navigation in Google Maps.',
-    exampleImage: '/src/assets/images/balcony_view_crossing_1792833670416.jpg',
+    exampleImage: balconyViewImg,
     exampleCaption: '30m ground path, 7-minute descent ETA, and 1-tap Google Maps walking directions.',
     hasTargetOverlay: true,
     targetPos: { x: '22%', y: '65%', label: 'Cafe Terrace' },

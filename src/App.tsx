@@ -26,9 +26,8 @@ import { RouteMap } from './components/RouteMap';
 import { RouteAnalysisCard } from './components/RouteAnalysisCard';
 import { VantageCalibrationPanel } from './components/VantageCalibrationPanel';
 import { ProductTourModal } from './components/ProductTourModal';
-
 // High-resolution real high-ground sample image for instant testing without camera
-const SAMPLE_IMAGE_URL = '/src/assets/images/balcony_view_crossing_1792833670416.jpg';
+import SAMPLE_IMAGE_URL from './assets/images/balcony_view_crossing_1792833670416.jpg';
 
 export default function App() {
   // Photo state (null initially until user takes/uploads photo or clicks sample)
