@@ -6,8 +6,27 @@ import {
   calculateTargetGroundPoint,
   normalizeBearing,
   getGoogleMapsDirectionsUrl,
+  estimateHeightAboveGround,
+  floorFromHeight,
   VantagePoint,
 } from './geoCalc';
+
+test('estimateHeightAboveGround subtracts terrain elevation and rejects implausible values', () => {
+  // 15th floor in a city at 120m elevation
+  assert.equal(estimateHeightAboveGround(165.4, 120), 45);
+  // Street level / GPS noise below ground
+  assert.equal(estimateHeightAboveGround(121, 120), null);
+  assert.equal(estimateHeightAboveGround(100, 120), null);
+  // Unrealistically high reading
+  assert.equal(estimateHeightAboveGround(2000, 120), null);
+  assert.equal(estimateHeightAboveGround(NaN, 120), null);
+});
+
+test('floorFromHeight maps meters to floors at 3m per floor with a minimum of 1', () => {
+  assert.equal(floorFromHeight(45), 15);
+  assert.equal(floorFromHeight(1), 1);
+  assert.equal(floorFromHeight(0), 1);
+});
 
 test('normalizeBearing wraps values correctly into 0..360', () => {
   assert.equal(normalizeBearing(0), 0);

@@ -12,53 +12,26 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { VantagePoint } from '../utils/geoCalc';
+import { GpsStatus } from '../utils/location';
 
 interface VantageCalibrationPanelProps {
   vantage: VantagePoint & { locationName: string };
+  gpsStatus: GpsStatus;
+  onRequestGps: () => void;
   onChange: (updated: VantagePoint & { locationName: string }) => void;
   onReset: () => void;
 }
 
 export function VantageCalibrationPanel({
   vantage,
+  gpsStatus,
+  onRequestGps,
   onChange,
   onReset,
 }: VantageCalibrationPanelProps) {
-  const [gpsLoading, setGpsLoading] = useState(false);
-  const [gpsMessage, setGpsMessage] = useState<string | null>(null);
+  const [sensorMessage, setSensorMessage] = useState<string | null>(null);
   const [gyroActive, setGyroActive] = useState(false);
-
-  const requestGeolocation = () => {
-    if (!navigator.geolocation) {
-      setGpsMessage('Geolocation not supported by this browser.');
-      return;
-    }
-
-    setGpsLoading(true);
-    setGpsMessage(null);
-
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setGpsLoading(false);
-        const { latitude, longitude, altitude } = pos.coords;
-        const newAltitude = altitude && altitude > 5 ? Math.round(altitude) : vantage.altitudeMeters;
-        onChange({
-          ...vantage,
-          lat: Number(latitude.toFixed(6)),
-          lon: Number(longitude.toFixed(6)),
-          altitudeMeters: newAltitude,
-          locationName: `GPS Fix (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
-        });
-        setGpsMessage('GPS locked successfully!');
-        setTimeout(() => setGpsMessage(null), 3000);
-      },
-      (err) => {
-        setGpsLoading(false);
-        setGpsMessage(`Location permission denied or unavailable (${err.message}). Using manual location.`);
-      },
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
-  };
+  const gpsLoading = gpsStatus === 'acquiring';
 
   const enableGyroSensors = () => {
     if (typeof window !== 'undefined' && 'DeviceOrientationEvent' in window) {
@@ -74,17 +47,17 @@ export function VantageCalibrationPanel({
             if (permissionState === 'granted') {
               bindOrientationListener();
             } else {
-              setGpsMessage('Device motion sensors permission denied.');
+              setSensorMessage('Device motion sensors permission denied.');
             }
           })
           .catch(() => {
-            setGpsMessage('Device motion sensors unavailable on this device.');
+            setSensorMessage('Device motion sensors unavailable on this device.');
           });
       } else {
         bindOrientationListener();
       }
     } else {
-      setGpsMessage('Device sensors not available in this browser.');
+      setSensorMessage('Device sensors not available in this browser.');
     }
   };
 
@@ -104,8 +77,8 @@ export function VantageCalibrationPanel({
       }
     };
     window.addEventListener('deviceorientation', handler, { once: true });
-    setGpsMessage('Sensors calibrated from phone tilt!');
-    setTimeout(() => setGpsMessage(null), 3000);
+    setSensorMessage('Sensors calibrated from phone tilt!');
+    setTimeout(() => setSensorMessage(null), 3000);
   };
 
   const getCompassDirectionLabel = (deg: number): string => {
@@ -148,7 +121,7 @@ export function VantageCalibrationPanel({
         </div>
 
         <button
-          onClick={requestGeolocation}
+          onClick={onRequestGps}
           disabled={gpsLoading}
           className="inline-flex items-center justify-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-medium text-xs rounded-lg shadow-2xs transition-colors shrink-0"
         >
@@ -157,10 +130,10 @@ export function VantageCalibrationPanel({
         </button>
       </div>
 
-      {gpsMessage && (
+      {sensorMessage && (
         <div className="text-xs px-3 py-2 bg-blue-50 text-blue-800 border border-blue-100 rounded-lg flex items-center gap-2">
           <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-          <span>{gpsMessage}</span>
+          <span>{sensorMessage}</span>
         </div>
       )}
 

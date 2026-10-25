@@ -43,6 +43,32 @@ export interface RouteWaypoint {
 }
 
 const EARTH_RADIUS_METERS = 6371000;
+export const METERS_PER_FLOOR = 3;
+
+/**
+ * Converts a height above ground into an approximate floor number (minimum floor 1).
+ */
+export function floorFromHeight(heightMeters: number): number {
+  return Math.max(1, Math.round(heightMeters / METERS_PER_FLOOR));
+}
+
+/**
+ * Estimates the observer's height above ground from GPS altitude and the terrain elevation below them.
+ * Returns null when the result is implausible: at/below ground level (GPS noise or a street-level user)
+ * or taller than any realistic vantage point.
+ */
+export function estimateHeightAboveGround(
+  gpsAltitudeMeters: number,
+  groundElevationMeters: number,
+  minMeters = 2,
+  maxMeters = 800
+): number | null {
+  const height = gpsAltitudeMeters - groundElevationMeters;
+  if (!Number.isFinite(height) || height < minMeters || height > maxMeters) {
+    return null;
+  }
+  return Math.round(height);
+}
 
 /**
  * Converts degrees to radians

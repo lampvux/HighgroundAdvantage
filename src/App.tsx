@@ -6,21 +6,19 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Camera,
-  Upload,
   MapPin,
   ExternalLink,
-  Target,
   ArrowDownRight,
   LocateFixed,
   SlidersHorizontal,
-  RefreshCw,
-  Compass,
   Building,
   Image as ImageIcon,
   CheckCircle2,
   HelpCircle,
+  AlertCircle,
 } from 'lucide-react';
-import { calculateTargetGroundPoint, VantagePoint } from './utils/geoCalc';
+import { calculateTargetGroundPoint, floorFromHeight, VantagePoint } from './utils/geoCalc';
+import { acquireLocationFix, GpsStatus } from './utils/location';
 import { PhotoViewfinder } from './components/PhotoViewfinder';
 import { RouteMap } from './components/RouteMap';
 import { RouteAnalysisCard } from './components/RouteAnalysisCard';
@@ -53,7 +51,11 @@ export default function App() {
     label?: string;
   } | null>(null);
 
-  const [gpsStatus, setGpsStatus] = useState<'idle' | 'acquiring' | 'locked' | 'error'>('idle');
+  const [gpsStatus, setGpsStatus] = useState<GpsStatus>('idle');
+  const [gpsMessage, setGpsMessage] = useState<string | null>(null);
+  // Where the current vantage height came from; GPS must not clobber a manually set floor
+  const [heightSource, setHeightSource] = useState<'default' | 'gps' | 'manual'>('default');
+  const [heightAccuracy, setHeightAccuracy] = useState<number | null>(null);
   const [showCalibration, setShowCalibration] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [showTour, setShowTour] = useState<boolean>(false);
@@ -83,34 +85,45 @@ export default function App() {
     setShowTour(true);
   };
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Camera input forces the rear camera on mobile; library input opens the photo gallery / file picker
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const libraryInputRef = useRef<HTMLInputElement>(null);
 
-  // Automatically request GPS when a photo is selected
-  const requestCurrentGps = () => {
-    if (!navigator.geolocation) {
-      setGpsStatus('error');
-      return;
-    }
-
+  // Acquire GPS position + height above ground. A GPS height never overwrites a height the user
+  // set by hand unless they explicitly ask for a refresh (overrideManualHeight).
+  const requestCurrentGps = async (overrideManualHeight = false) => {
     setGpsStatus('acquiring');
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude, altitude } = pos.coords;
-        setVantage((prev) => ({
-          ...prev,
-          lat: Number(latitude.toFixed(6)),
-          lon: Number(longitude.toFixed(6)),
-          altitudeMeters: altitude && altitude > 5 ? Math.round(altitude) : prev.altitudeMeters,
-          locationName: `GPS Fix (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`,
-        }));
-        setGpsStatus('locked');
-      },
-      () => {
-        setGpsStatus('error');
-      },
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
+    setGpsMessage(null);
+    try {
+      const fix = await acquireLocationFix();
+      const gpsHeight = fix.heightAboveGroundMeters;
+      const applyHeight = gpsHeight !== null && (overrideManualHeight || heightSource !== 'manual');
+
+      setVantage((prev) => ({
+        ...prev,
+        lat: fix.lat,
+        lon: fix.lon,
+        locationName: `GPS Fix (${fix.lat.toFixed(4)}, ${fix.lon.toFixed(4)})`,
+        ...(applyHeight ? { altitudeMeters: gpsHeight, floor: floorFromHeight(gpsHeight) } : {}),
+      }));
+      if (applyHeight) {
+        setHeightSource('gps');
+        setHeightAccuracy(fix.heightAccuracyMeters);
+      }
+      setGpsStatus('locked');
+      if (gpsHeight === null && heightSource !== 'manual') {
+        setGpsMessage('Your device did not report a usable height. Set your floor in Height & Tilt.');
+      }
+    } catch (err) {
+      setGpsStatus('error');
+      setGpsMessage(err instanceof Error ? err.message : 'Could not get your location.');
+    }
   };
+
+  // Ask for the user's location as soon as the app opens
+  useEffect(() => {
+    requestCurrentGps();
+  }, []);
 
   const handlePhotoFile = (file: File) => {
     const reader = new FileReader();
@@ -118,7 +131,7 @@ export default function App() {
       const result = e.target?.result as string;
       setPhotoUrl(result);
       setSelectedPoint({ xRatio: 0.5, yRatio: 0.65, label: 'Selected Target Spot' });
-      requestCurrentGps();
+      if (gpsStatus !== 'locked') requestCurrentGps();
     };
     reader.readAsDataURL(file);
   };
@@ -126,13 +139,22 @@ export default function App() {
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handlePhotoFile(file);
+    // Reset so picking the same file again still fires onChange
+    e.target.value = '';
   };
 
   const handleLoadSample = () => {
     setPhotoUrl(SAMPLE_IMAGE_URL);
     setSelectedPoint({ xRatio: 0.22, yRatio: 0.65, label: 'Spotted Yellow Cafe Umbrellas' });
-    requestCurrentGps();
+    if (gpsStatus !== 'locked') requestCurrentGps();
   };
+
+  const heightLabel =
+    heightSource === 'gps'
+      ? `~${vantage.altitudeMeters}m above ground (GPS${heightAccuracy !== null ? ` ±${heightAccuracy}m` : ''})`
+      : heightSource === 'manual'
+        ? `${vantage.altitudeMeters}m above ground (manual)`
+        : `${vantage.altitudeMeters}m above ground (default)`;
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -152,10 +174,17 @@ export default function App() {
   return (
     <div className="min-h-screen max-w-full overflow-x-hidden bg-slate-50 text-slate-900 flex flex-col antialiased">
       <input
-        ref={fileInputRef}
+        ref={cameraInputRef}
         type="file"
         accept="image/*"
         capture="environment"
+        onChange={handleFileInputChange}
+        className="hidden"
+      />
+      <input
+        ref={libraryInputRef}
+        type="file"
+        accept="image/*"
         onChange={handleFileInputChange}
         className="hidden"
       />
@@ -206,11 +235,22 @@ export default function App() {
           )}
 
           <button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => libraryInputRef.current?.click()}
+            aria-label="Choose photo from library"
+            title="Choose from Library"
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg shadow-2xs transition-colors whitespace-nowrap shrink-0"
+          >
+            <ImageIcon className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Library</span>
+          </button>
+
+          <button
+            onClick={() => cameraInputRef.current?.click()}
+            aria-label="Take photo with camera"
             className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-xs transition-colors whitespace-nowrap shrink-0"
           >
             <Camera className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">{photoUrl ? 'New Photo' : 'Take / Upload Photo'}</span>
+            <span className="hidden sm:inline">{photoUrl ? 'New Photo' : 'Take Photo'}</span>
             <span className="sm:hidden">{photoUrl ? 'New' : 'Photo'}</span>
           </button>
         </div>
@@ -223,7 +263,7 @@ export default function App() {
         onSelectSampleImage={(sampleUrl) => {
           setPhotoUrl(sampleUrl);
           setSelectedPoint({ xRatio: 0.5, yRatio: 0.5, label: 'Target Spot' });
-          requestCurrentGps();
+          if (gpsStatus !== 'locked') requestCurrentGps();
         }}
       />
 
@@ -239,7 +279,7 @@ export default function App() {
               }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => libraryInputRef.current?.click()}
               className={`w-full max-w-xl p-8 sm:p-12 rounded-3xl border-2 border-dashed text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-4 ${
                 isDragging
                   ? 'border-blue-500 bg-blue-50/60 scale-[1.01]'
@@ -262,9 +302,25 @@ export default function App() {
               <div className="flex flex-col sm:flex-row items-center gap-3 mt-2 w-full sm:w-auto">
                 <button
                   type="button"
-                  className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-sm transition-all"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    cameraInputRef.current?.click();
+                  }}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-sm transition-all"
                 >
-                  Snap Photo from Camera
+                  <Camera className="w-4 h-4" />
+                  Take Photo
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    libraryInputRef.current?.click();
+                  }}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-semibold text-xs sm:text-sm rounded-xl shadow-2xs transition-colors"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  Choose from Library
                 </button>
                 <button
                   type="button"
@@ -279,7 +335,7 @@ export default function App() {
               </div>
 
               <div className="flex items-center gap-2 mt-2 text-[11px] text-slate-400">
-                <span>Supports camera snapshots, JPEG, PNG, or drag-and-drop</span>
+                <span>Camera, photo library, or drag-and-drop</span>
                 <span aria-hidden="true">·</span>
                 <button
                   type="button"
@@ -292,6 +348,50 @@ export default function App() {
                   Product Tour &amp; Guide
                 </button>
               </div>
+            </div>
+
+            {/* Location status (requested automatically on load) */}
+            <div className="w-full max-w-xl mt-4 flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-3 p-3 bg-white rounded-xl border border-slate-200 shadow-2xs text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className={`p-1.5 rounded-lg shrink-0 ${gpsStatus === 'locked' ? 'bg-emerald-50 text-emerald-600' : gpsStatus === 'error' ? 'bg-amber-50 text-amber-600' : 'bg-blue-50 text-blue-600'}`}>
+                    <LocateFixed className={`w-3.5 h-3.5 ${gpsStatus === 'acquiring' ? 'animate-spin' : ''}`} />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-semibold text-slate-800 block">
+                      {gpsStatus === 'locked'
+                        ? 'Your location is locked'
+                        : gpsStatus === 'acquiring'
+                          ? 'Finding your location…'
+                          : gpsStatus === 'error'
+                            ? 'Location unavailable'
+                            : 'Location not requested yet'}
+                    </span>
+                    {gpsStatus === 'locked' && (
+                      <span className="text-slate-500 block truncate">
+                        <span className="font-mono tabular-nums">{vantage.lat.toFixed(5)}, {vantage.lon.toFixed(5)}</span>
+                        {' · '}
+                        {heightLabel}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {gpsStatus !== 'acquiring' && gpsStatus !== 'locked' && (
+                  <button
+                    type="button"
+                    onClick={() => requestCurrentGps(true)}
+                    className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-medium text-[11px] shrink-0 transition-colors"
+                  >
+                    Retry
+                  </button>
+                )}
+              </div>
+              {gpsMessage && (
+                <div className="text-[11px] px-3 py-2 bg-amber-50 text-amber-800 border border-amber-100 rounded-lg flex items-start gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
+                  <span>{gpsMessage}</span>
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -313,12 +413,16 @@ export default function App() {
                       <CheckCircle2 className="w-3 h-3" /> Locked
                     </span>
                   )}
+                  <span className="text-slate-500 flex items-center gap-1 shrink-0">
+                    <Building className="w-3 h-3" />
+                    {heightLabel}
+                  </span>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                 <button
-                  onClick={requestCurrentGps}
+                  onClick={() => requestCurrentGps(true)}
                   disabled={gpsStatus === 'acquiring'}
                   className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-medium text-[11px] flex items-center gap-1 transition-colors"
                 >
@@ -328,12 +432,25 @@ export default function App() {
               </div>
             </div>
 
+            {gpsMessage && (
+              <div className="text-xs px-3 py-2 bg-amber-50 text-amber-800 border border-amber-100 rounded-lg flex items-start gap-2">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
+                <span>{gpsMessage}</span>
+              </div>
+            )}
+
             {/* Expandable Calibration Panel */}
             {showCalibration && (
               <VantageCalibrationPanel
                 vantage={vantage}
-                onChange={(updated) => setVantage(updated)}
+                gpsStatus={gpsStatus}
+                onRequestGps={() => requestCurrentGps(true)}
+                onChange={(updated) => {
+                  if (updated.altitudeMeters !== vantage.altitudeMeters) setHeightSource('manual');
+                  setVantage(updated);
+                }}
                 onReset={() => {
+                  setHeightSource('default');
                   setVantage((prev) => ({
                     ...prev,
                     floor: 15,
@@ -391,6 +508,7 @@ export default function App() {
                   floor={vantage.floor ?? Math.round(vantage.altitudeMeters / 3)}
                   calculation={targetCalculation}
                   onFloorChange={(newFloor) => {
+                    setHeightSource('manual');
                     setVantage((prev) => ({
                       ...prev,
                       floor: newFloor,
